@@ -406,6 +406,13 @@ function doGet(e) {
       // v4.4.2: removed from the users sheet (or never added) = signed out;
       // signing in again shows NOT_SET_UP_MSG.
       if (!_caller.listed) return jsonResponse({ error: "AUTH_REQUIRED" });
+      // v4.4.2: an admin/supervisor previewing the analyst view gets exactly
+      // what an analyst would: their own rows only, no team or admin data.
+      // This can only ever lower access, never raise it.
+      if (params.viewAs === "analyst" && _caller.privileged) {
+        _caller = Object.assign({}, _caller, { role: "analyst", privileged: false, previewing: true });
+        if (action === "getAllUsers" || action === "getDigestRecipients") return jsonResponse([]);
+      }
       console.log("doGet " + action + " for " + callerEmail + " auth+user lookup " + (Date.now() - _reqStart) + "ms");
       if (action === "me") {
         return jsonResponse({ authenticated: true, email: _caller.email, role: _caller.role, isSupervisor: _caller.privileged, displayName: _caller.displayName });
@@ -2925,5 +2932,3 @@ function applyDuplicateCleanup() {
   }
   Logger.log((finished ? "DONE.\n" : "STOPPED for time; run applyDuplicateCleanup() again to finish.\n") + summary.join("\n") + "\nRemoved rows are saved in the dup_cleanup_removed tab.");
 }
-
-
