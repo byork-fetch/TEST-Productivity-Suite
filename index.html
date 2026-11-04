@@ -284,12 +284,14 @@ i.ra{background:hsl(265,55%,55%);} i.rs{background:hsl(180,80%,27%);}
           <button id="themePaletteBtn" class="btn btn-ghost" title="Choose theme">🎨</button>
           <button id="teamDirBtn" class="btn btn-ghost" style="display:none">👥 Team Directory</button>
           <button id="userMgmtBtn" class="btn btn-ghost" style="display:none">⚙️ Users</button>
-          <button id="viewModeBtn" class="btn btn-ghost" style="display:none" title="Switch between your admin view and the view an analyst gets"></button>
           <button id="signOutBtn" class="btn btn-ghost">👤 Sign Out</button>
         </div>
       </div>
       <p class="header-greeting" id="headerGreeting"></p>
-      <p class="header-greeting" id="viewModeNote" style="display:none;font-weight:600"></p>
+      <div id="viewModeRow" style="display:none;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.6rem">
+        <button id="viewModeBtn" class="btn btn-ghost" title="Switch between your admin view and the view an analyst gets"></button>
+        <span id="viewModeNote" style="display:none;font-weight:600;font-size:.9rem;color:rgba(255,255,255,.9)"></span>
+      </div>
     </header>
 
     <div id="view-dashboard">
@@ -930,10 +932,10 @@ function setPersonalView(on){ try { if (on) sessionStorage.setItem(VIEW_MODE_KEY
 function setupViewModeToggle(realUser){
   var btn = document.getElementById("viewModeBtn"), note = document.getElementById("viewModeNote");
   if (!btn || !realUser || !realUser.isSupervisor) return;
-  btn.style.display = "block";
+  var row = document.getElementById("viewModeRow"); if (row) row.style.display = "flex";
   btn.textContent = state.personalView ? "🛡️ Back to Admin View" : "👁️ Analyst View";
   if (state.personalView && note) {
-    note.style.display = "block";
+    note.style.display = "inline";
     note.textContent = "Analyst view: you're seeing the dashboard the way an analyst does, with only your own data.";
   }
   btn.addEventListener("click", function(){ setPersonalView(!state.personalView); window.location.reload(); });
