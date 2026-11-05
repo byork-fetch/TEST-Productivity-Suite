@@ -1816,6 +1816,12 @@ function _digestGetPrivilegedNames() {
 // ============================================================
 var WORK_SCHEDULE_SOURCE_ID    = "";               // schedule spreadsheet ID, or "" for this one
 var WORK_SCHEDULE_SOURCE_SHEET = "work_schedules"; // tab name holding the grid
+// v4.4.2: the time zone the work_schedules hours are written in, for anyone
+// without their own "Time Zone" column value. It used to fall back to the
+// project's time zone (Eastern), which read the tab's Central hours an hour
+// early. The project time zone itself is left alone on purpose: changing it
+// can shift how existing dates in the sheet are read.
+var WORK_SCHEDULE_DEFAULT_TZ   = "America/Chicago";
 var _DAY_NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 var _TZ_ALIASES = {
   eastern:"America/New_York", et:"America/New_York", est:"America/New_York", edt:"America/New_York",
@@ -1852,15 +1858,15 @@ function _parseScheduleCell(v) {
 
 function _resolveScheduleTz(s) {
   var t = String(s || "").trim();
-  if (!t) return Session.getScriptTimeZone();
+  if (!t) return WORK_SCHEDULE_DEFAULT_TZ;
   if (t.indexOf("/") !== -1) return t;
-  return _TZ_ALIASES[t.toLowerCase()] || Session.getScriptTimeZone();
+  return _TZ_ALIASES[t.toLowerCase()] || WORK_SCHEDULE_DEFAULT_TZ;
 }
 
 // { normName: { tz, days: { 0..6: "off" | [[s,e],...] } } } — keyed by full
 // name and by nickname + last name.
 function _getWorkSchedules() {
-  return cachedCall("work_sched_v441b", 300, function() {
+  return cachedCall("work_sched_v442c", 300, function() {
     var ss = WORK_SCHEDULE_SOURCE_ID ? SpreadsheetApp.openById(WORK_SCHEDULE_SOURCE_ID) : SpreadsheetApp.openById(SPREADSHEET_ID);
     var sh = ss.getSheetByName(WORK_SCHEDULE_SOURCE_SHEET);
     if (!sh || sh.getLastRow() < 2) return {};
@@ -1940,10 +1946,14 @@ function _buildShiftWindows(entries) {
 //     "OFF"): every hour is OT.
 //   - No schedule row (or a blank day): the 8-hour rule still applies, but
 //     OFF days can't be recognised — flagged as "off days unknown".
+//   - v4.4.2: OT signups are in 1-hour blocks, so a day with
+//     OT_MIN_DAILY_SEC (45 min) or less of OT isn't counted as OT; that
+//     time stays in Regular. Anything over it counts in full (no rounding).
 // Everyone is included; Analysts who only track AHT will undercount.
 // ============================================================
 var OT_DAILY_REGULAR_SEC = 8 * 3600;
 var OT_DAY_ROLLOVER_HOUR = 4;
+var OT_MIN_DAILY_SEC = 45 * 60; // v4.4.2: days with this much OT or less don't count
 var OT_UNPAID_TASK_RE = /lunch/i;
 
 function _prevYmd(ymd) {
@@ -1988,6 +1998,7 @@ function _computeOvertime(entries, fromYmd, toYmd) {
     var cell = rec ? rec.days[new Date(Date.UTC(p[0], p[1]-1, p[2])).getUTCDay()] : undefined;
     var off = cell === "off";
     var ot = off ? worked : Math.max(0, worked - OT_DAILY_REGULAR_SEC);
+    if (ot <= OT_MIN_DAILY_SEC) ot = 0; // v4.4.2: 45 min or less on a day isn't OT
     days.push({ analyst: g.analyst, date: g.date, workedSec: worked, off: off, otSec: ot });
     var a = people[g.analyst] = people[g.analyst] || { analyst: g.analyst, days: 0, workedSec: 0, regularSec: 0, overDaySec: 0, offDaySec: 0, otSec: 0, scheduleKnown: !!rec };
     a.days++; a.workedSec += worked; a.regularSec += worked - ot; a.otSec += ot;
@@ -2250,7 +2261,7 @@ function sendWeeklyDigest() {
           + '<td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600">'+fmtMinShort(a.otSec)+'</td></tr>';
       }).join("");
       otSection = '<h3 style="margin:24px 0 4px;font-size:14px;color:#333">🕒 Overtime</h3>'
-        + '<p style="color:#888;font-size:12px;margin:0 0 8px">'+otList.length+' '+(otList.length===1?'person':'people')+', '+fmtMinShort(otTotal)+' total. Worked time over 8h on a scheduled day, or any time on an off day (lunch excluded). Based on tracked time only.</p>'
+        + '<p style="color:#888;font-size:12px;margin:0 0 8px">'+otList.length+' '+(otList.length===1?'person':'people')+', '+fmtMinShort(otTotal)+' total. Worked time over 8h on a scheduled day, or any time on an off day (lunch excluded). Days with 45 minutes or less of overtime aren\'t counted. Based on tracked time only.</p>'
         + '<table style="border-collapse:collapse;width:100%;font-size:13px"><tbody>'+otRows+'</tbody></table>';
     } else {
       otSection = '<h3 style="margin:24px 0 4px;font-size:14px;color:#333">🕒 Overtime</h3>'
